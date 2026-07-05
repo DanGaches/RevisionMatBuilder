@@ -4,6 +4,7 @@ export default function Toolbar({
   onPageSizeChange,
   onOrientationChange,
   onAddBox,
+  onAddImageClick,
   onAutoArrange,
   onSave,
   onLoadClick,
@@ -31,6 +32,7 @@ export default function Toolbar({
       </label>
 
       <button className="primary" onClick={onAddBox}>+ Add question box</button>
+      <button onClick={onAddImageClick}>+ Add image</button>
       <button onClick={onAutoArrange}>Arrange automatically</button>
 
       <div className="divider" />
@@ -41,7 +43,7 @@ export default function Toolbar({
       <button className="danger" onClick={onClear}>Clear mat</button>
 
       <p className="hint">
-        Drag boxes to move them. Select a box and use its handles to resize it.
+        Drag items to move them. Select an item and use its handles to resize it.
       </p>
     </aside>
   )

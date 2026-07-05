@@ -7,6 +7,7 @@ import { getPageSize } from './pageSizes'
 
 const makeBox = (index = 0) => ({
   id: crypto.randomUUID(),
+  type: 'question',
   title: `Topic ${index + 1}`,
   questions: ['Type your first question here', 'Add another question here'],
   x: 30 + index * 18,
@@ -15,10 +16,34 @@ const makeBox = (index = 0) => ({
   height: 240,
   fontSize: 17,
   titleFontSize: 22,
+  questionLayout: 'compact',
   linedSpace: true,
   answerLines: 5,
   background: '#ffffff',
 })
+
+const makeImageBox = ({ src, name, naturalWidth, naturalHeight }, index = 0, page) => {
+  const maxWidth = Math.min(360, page.widthPx - 60)
+  const maxHeight = Math.min(280, page.heightPx - 60)
+  const scale = Math.min(maxWidth / naturalWidth, maxHeight / naturalHeight, 1)
+  const width = Math.max(80, Math.round(naturalWidth * scale))
+  const height = Math.max(80, Math.round(naturalHeight * scale))
+
+  return {
+    id: crypto.randomUUID(),
+    type: 'image',
+    title: name || `Image ${index + 1}`,
+    src,
+    x: Math.min(40 + index * 18, page.widthPx - width - 20),
+    y: Math.min(40 + index * 18, page.heightPx - height - 20),
+    width,
+    height,
+    naturalWidth,
+    naturalHeight,
+    lockAspectRatio: true,
+    opacity: 1,
+  }
+}
 
 export default function App() {
   const [pageSize, setPageSize] = useState('A4')
@@ -26,6 +51,7 @@ export default function App() {
   const [boxes, setBoxes] = useState([makeBox(0)])
   const [selectedId, setSelectedId] = useState(null)
   const fileInputRef = useRef()
+  const imageInputRef = useRef()
   const stageRef = useRef()
 
   const page = useMemo(() => getPageSize(pageSize, orientation), [pageSize, orientation])
@@ -41,6 +67,61 @@ export default function App() {
     newBox.y = Math.min(newBox.y, page.heightPx - newBox.height - 20)
     setBoxes((current) => [...current, newBox])
     setSelectedId(newBox.id)
+  }
+
+  function addImageFromFile(event) {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onload = () => {
+      const image = new Image()
+      image.onload = () => {
+        const newImage = makeImageBox(
+          {
+            src: reader.result,
+            name: file.name.replace(/\.[^.]+$/, ''),
+            naturalWidth: image.naturalWidth,
+            naturalHeight: image.naturalHeight,
+          },
+          boxes.length,
+          page,
+        )
+        setBoxes((current) => [...current, newImage])
+        setSelectedId(newImage.id)
+      }
+      image.src = reader.result
+    }
+    reader.readAsDataURL(file)
+    event.target.value = ''
+  }
+
+  function replaceImage(id, event) {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    const reader = new FileReader()
+    reader.onload = () => {
+      const image = new Image()
+      image.onload = () => {
+        const current = boxes.find((box) => box.id === id)
+        const nextWidth = current?.width ?? image.naturalWidth
+        const nextHeight = current?.lockAspectRatio !== false
+          ? nextWidth * (image.naturalHeight / image.naturalWidth)
+          : current?.height ?? image.naturalHeight
+        updateBox(id, {
+          title: file.name.replace(/\.[^.]+$/, ''),
+          src: reader.result,
+          naturalWidth: image.naturalWidth,
+          naturalHeight: image.naturalHeight,
+          width: nextWidth,
+          height: nextHeight,
+        })
+      }
+      image.src = reader.result
+    }
+    reader.readAsDataURL(file)
+    event.target.value = ''
   }
 
   function duplicateBox(id) {
@@ -74,10 +155,26 @@ export default function App() {
     setBoxes((current) => current.map((box, index) => {
       const column = index % columns
       const row = Math.floor(index / columns)
+      const cellX = margin + column * (width + gap)
+      const cellY = margin + row * (height + gap)
+
+      if (box.type === 'image' && box.lockAspectRatio !== false && box.naturalWidth && box.naturalHeight) {
+        const scale = Math.min(width / box.naturalWidth, height / box.naturalHeight)
+        const imageWidth = box.naturalWidth * scale
+        const imageHeight = box.naturalHeight * scale
+        return {
+          ...box,
+          x: cellX + (width - imageWidth) / 2,
+          y: cellY + (height - imageHeight) / 2,
+          width: imageWidth,
+          height: imageHeight,
+        }
+      }
+
       return {
         ...box,
-        x: margin + column * (width + gap),
-        y: margin + row * (height + gap),
+        x: cellX,
+        y: cellY,
         width,
         height,
       }
@@ -129,7 +226,7 @@ export default function App() {
   }
 
   function clearMat() {
-    if (confirm('Clear every box from this revision mat?')) {
+    if (confirm('Clear every item from this revision mat?')) {
       setBoxes([])
       setSelectedId(null)
     }
@@ -143,6 +240,7 @@ export default function App() {
         onPageSizeChange={setPageSize}
         onOrientationChange={setOrientation}
         onAddBox={addBox}
+        onAddImageClick={() => imageInputRef.current?.click()}
         onAutoArrange={autoArrange}
         onSave={saveLayout}
         onLoadClick={() => fileInputRef.current?.click()}
@@ -156,7 +254,7 @@ export default function App() {
             <h1>Revision Mat Builder</h1>
             <p>{pageSize} · {orientation}</p>
           </div>
-          <span>{boxes.length} box{boxes.length === 1 ? '' : 'es'}</span>
+          <span>{boxes.length} item{boxes.length === 1 ? '' : 's'}</span>
         </header>
 
         <RevisionCanvas
@@ -174,9 +272,11 @@ export default function App() {
         updateBox={updateBox}
         duplicateBox={duplicateBox}
         deleteBox={deleteBox}
+        replaceImage={replaceImage}
       />
 
       <input ref={fileInputRef} type="file" accept="application/json" hidden onChange={loadLayout} />
+      <input ref={imageInputRef} type="file" accept="image/*" hidden onChange={addImageFromFile} />
     </main>
   )
 }
